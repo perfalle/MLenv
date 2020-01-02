@@ -65,7 +65,6 @@ class Experiment():
                                    f'{metaparams} but meta file was {meta}.')
 
         checkpoints = self._get_checkpoints(run_path)
-        print(checkpoints)
 
         if len(checkpoints) == 0:
             checkpoint_path = os.path.join(run_path, '0')
@@ -184,7 +183,14 @@ class Experiment():
                     checkpoint_meta = json.load(file)
 
                 # but should also be the folder name
-                assert(epoch == int(os.path.basename(checkpoint_path)))
+                if 'epoch' not in checkpoint_meta or 'time' not in checkpoint_meta:
+                    raise KeyError(f'Checkpoint meta must contain "epoch" and "time" of training: {checkpoint_meta.keys()}.')
+
+                epoch_folder_name = int(os.path.basename(checkpoint_path))
+                epoch_meta = int(checkpoint_meta['epoch'])
+                if epoch_meta != epoch_folder_name:
+                    raise KeyError(f'Checkpoint folder name must be the epoch of the checkpoint and matching the epoch in the meta file, ' +
+                                   f'but they were not equal: Folder name was {epoch_folder_name}, meta file says {epoch_meta}.')
 
                 # load only scalar evaluations from the checkpoint
                 evaluation = self._load_evaluation(checkpoint_path, lambda k,v: v['type'] == 'scalar')
@@ -192,7 +198,7 @@ class Experiment():
                 # make sure, keys ara unique among evaluation, run metaparams and checkpoint meta information (time and epoch)
                 if not (len(evaluation.keys() | metaparams.keys() | checkpoint_meta.keys()) ==
                         len(evaluation.keys()) +  len(metaparams.keys()) + len(checkpoint_meta.keys())):
-                    raise KeyError(f'evaluation keys, metaparam keys must be disjoint and cannot be one of {checkpoint_meta.keys()}: {evaluation.keys()}, {metaparams.keys()}')
+                    raise KeyError(f'evaluation keys, metaparam keys must be disjoint and cannot be one of {checkpoint_meta.keys()}: {evaluation.keys()}, {metaparams.keys()}.')
 
                 # merge everything into one directory
                 experience_row = {}
