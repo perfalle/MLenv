@@ -108,6 +108,6 @@ def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples
     width, height = fig_reconstruction_samples.get_size_inches() * fig_reconstruction_samples.get_dpi()
     image = image.reshape((int(width), int(height), 3))
     # image = image.reshape((3, int(width), int(height)))
-    # image = np.transpose(image, (2,0,1))
+    image = np.transpose(image, (2,0,1))
 
     return {'type': 'image', 'value': image}

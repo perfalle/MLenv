@@ -12,6 +12,7 @@ class Experiment():
     # call in sub class constructor
     def __init__(self, logdir=None):
         self.logdir = logdir or f'log_{self.__class__.__name__}'
+        self.tb_logdir = os.path.join(self.logdir, 'tb')
         self.provide_experience = True
 
     # override these methods ##############################
@@ -55,7 +56,7 @@ class Experiment():
         run_name = logging._file_name_from_metaparams(metaparams)
         print(f'Run: {run_name}')
         run_path = os.path.join(self.logdir, run_name)
-        run_meta_path = os.path.join(run_path, logging.EVALUATION_FILE_EXT)
+        run_meta_path = os.path.join(run_path, logging.RUN_META_FILE)
 
         # write or read run meta file
         if not os.path.exists(run_path):
@@ -80,7 +81,7 @@ class Experiment():
             model = self.build_model(metaparams)
 
             # save model
-            model_path = os.path.join(checkpoint_path, logging.EVALUATION_FILE_EXT)
+            model_path = os.path.join(checkpoint_path, logging.MODEL_FILE)
             self.save_model(model, model_path)
 
             # save initial checkpoint meta
@@ -90,10 +91,11 @@ class Experiment():
                 json.dump(checkpoint_meta, file)
 
             # initial evaluation
-            evaluation = self.evaluate(model, 0, 0)
+            evaluation = self.evaluate(model, 0, 0) or {}
 
             # save evaluation
             logging._save_evaluation(evaluation, checkpoint_path)
+            logging._write_evaluation_to_experiment_tensorboard(self.tb_logdir, metaparams, evaluation, 0, 0)
 
             # instead of re-reading the checkpoints from file, just adjust the variable
             # to have the newly created one included
@@ -111,7 +113,7 @@ class Experiment():
                 checkpoint_meta = json.load(file)
 
             # load model
-            model_path = os.path.join(checkpoint_path, logging.EVALUATION_FILE_EXT)
+            model_path = os.path.join(checkpoint_path, logging.MODEL_FILE)
             model = self.load_model(model_path, metaparams)
 
             # train model
@@ -131,7 +133,7 @@ class Experiment():
                 os.makedirs(new_checkpoint_path)
 
             # save model
-            new_model_path = os.path.join(new_checkpoint_path, logging.EVALUATION_FILE_EXT)
+            new_model_path = os.path.join(new_checkpoint_path, logging.MODEL_FILE)
             self.save_model(model, new_model_path)
 
             # save checkpoint meta
@@ -141,7 +143,9 @@ class Experiment():
                 json.dump(checkpoint_meta, file)
 
             # evaluate
-            evaluation = self.evaluate(model, epoch, time)
+            evaluation = self.evaluate(model, checkpoint_meta['epoch'], checkpoint_meta['time']) or {}
 
             # save evaluation
             logging._save_evaluation(evaluation, new_checkpoint_path)
+            logging._write_evaluation_to_experiment_tensorboard(self.tb_logdir, metaparams, evaluation,
+                                                                checkpoint_meta['time'], checkpoint_meta['epoch'])

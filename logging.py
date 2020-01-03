@@ -1,6 +1,8 @@
 import os
 import pickle, json
+import numpy as np
 import pandas as pd
+from torch.utils.tensorboard import SummaryWriter
 
 import cv2
 
@@ -10,6 +12,21 @@ RUN_META_FILE = 'run_meta.json'
 CHECKPOINT_META_FILE = 'checkpoint_meta.json'
 EVALUATION_FILE_EXT = '.ev'
 
+def _write_evaluation_to_experiment_tensorboard(tb_logdir, metaparams, evaluation,
+                                                walltime, global_step):#, section=None):
+    print(walltime, global_step)
+    run_name = _file_name_from_metaparams(metaparams)
+    tb_logdir_run = os.path.join(tb_logdir, run_name)
+    tensorboard_writer = SummaryWriter(tb_logdir_run)
+    for key in evaluation:
+        tag = key# if section is None else f'{section}/{key}'
+        value = evaluation[key]['value']
+        type = evaluation[key]['type']
+        if type == 'scalar':
+            tensorboard_writer.add_scalar(tag, value, walltime=walltime, global_step=global_step)
+        elif type == 'image':
+            tensorboard_writer.add_image(tag, value, walltime=walltime, global_step=global_step)
+
 def _save_evaluation(evaluation, checkpoint_path):
     _validate_evaluation(evaluation)
     # a file for each key in en extra evaluation directory and pickeled content
@@ -18,9 +35,11 @@ def _save_evaluation(evaluation, checkpoint_path):
         os.makedirs(evaluation_path)
     for key in evaluation or {}:
         if evaluation[key]['type'] == 'image':
-            cv2.imwrite(os.path.join(evaluation_path, key + '.png'), evaluation[key]['value'])
+            image = np.transpose(evaluation[key]['value'], (1,2,0))
+            cv2.imwrite(os.path.join(evaluation_path, key + '.png'), image)
         with open(os.path.join(evaluation_path, key + EVALUATION_FILE_EXT), 'wb') as file:
             pickle.dump(evaluation[key], file)
+
 
 def _load_evaluation(checkpoint_path, filter_fn=None):
     # a file for each key in en extra evaluation directory and pickeled content
