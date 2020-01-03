@@ -18,7 +18,7 @@ class Experiment():
     # call in sub class constructor
     def __init__(self, logdir=None):
         self.logdir = logdir or f'log_{self.__class__.__name__}'
-        self.provide_experience = False
+        self.provide_experience = True
 
     # override these methods ##############################
     def get_metaparamspace(self):
@@ -40,7 +40,7 @@ class Experiment():
         pass # -> evaluation(s), dict: {'metric name': {'type': scalar, 'value': value}}
 
     def get_metaparams(self, metaparamspace, experience):
-        """experience: pandas dataframe with 'epoch', 'time' as well as all metaparameters, all 'scalar' evaluations"""
+        """experience: pandas dataframe with 'epoch', 'time' as well as all metaparameters and all 'scalar' evaluations"""
         pass # -> training conditions: metaparams[, epochs=1]
 
     # end ################################################
@@ -255,18 +255,24 @@ class Experiment():
             raise ValueError(f'Metaparams cannot be None.')
         def cvt(p):
             d = str(p)
-            if type(p) == float:
-                d = f'{p:.5e}'
+            try:
+                f = float(p)
+                d = f'{p:.4e}'
                 d_parts = d.split('e')
                 d_base = d_parts[0]
                 d_exp = int(d_parts[1])
+                d_base = d_base.strip('0')
+                d_base = d_base.rstrip('.')
                 d = d_base
                 if d_exp != 0:
                     d = f'{d_base}e{d_exp}'
+            except:
+                pass
             return d
 
         plist = list(map(lambda mp: f'{mp}={cvt(metaparams[mp])}', metaparams))
         name = ','.join(plist)
+        print('_file_name_from_metaparams', name)
         return name
 
     def _get_checkpoints(self, run_path):
