@@ -3,6 +3,9 @@ import time as pytime
 import pickle, json
 import pandas as pd
 
+import cv2
+
+
 # import like: from MLenv import Experiment
 
 MODEL_FILE = 'model.mdl'
@@ -15,6 +18,7 @@ class Experiment():
     # call in sub class constructor
     def __init__(self, logdir=None):
         self.logdir = logdir or f'log_{self.__class__.__name__}'
+        self.provide_experience = False
 
     # override these methods ##############################
     def get_metaparamspace(self):
@@ -45,7 +49,7 @@ class Experiment():
     def run(self):
         # get conditions for this run from implementation
         metaparamspace = self.get_metaparamspace()
-        experience = self._get_experience_scalars()
+        experience = self._get_experience_scalars() if self.provide_experience else None
         metaparams_and_epochs = self.get_metaparams(metaparamspace, experience)
         if metaparams_and_epochs is None:
             raise ValueError(f'Metaparams, returned by "get_metaparams" cannot be None.')
@@ -155,6 +159,8 @@ class Experiment():
         if not os.path.exists(evaluation_path):
             os.makedirs(evaluation_path)
         for key in evaluation or {}:
+            if evaluation[key]['type'] == 'image':
+                cv2.imwrite(os.path.join(evaluation_path, key + '.png'), evaluation[key]['value'])
             with open(os.path.join(evaluation_path, key + EVALUATION_FILE_EXT), 'wb') as file:
                 pickle.dump(evaluation[key], file)
 
