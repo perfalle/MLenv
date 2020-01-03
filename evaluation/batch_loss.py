@@ -10,4 +10,4 @@ def batch_loss(dataloader, model, loss_fn, **loss_kwargs):
         i+=1
     loss = running_loss / i
     print(f'loss is {loss}')
-    return float(loss)
+    return {'type': 'scalar', 'value': float(loss)}

@@ -110,4 +110,4 @@ def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples
     # image = image.reshape((3, int(width), int(height)))
     # image = np.transpose(image, (2,0,1))
 
-    return image
+    return {'type': 'image', 'value': image}
