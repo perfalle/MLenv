@@ -3,6 +3,8 @@ import time as pytime
 import pickle, json
 import pandas as pd
 
+# import like: from MLenv import Experiment
+
 MODEL_FILE = 'model.mdl'
 EVAUATION_DIR = 'evaluation'
 RUN_META_FILE = 'run_meta.json'
@@ -12,7 +14,7 @@ EVALUATION_FILE_EXT = '.ev'
 class Experiment():
     # call in sub class constructor
     def __init__(self, logdir=None):
-        self.logdir = logdir or self.__class__.__name__
+        self.logdir = logdir or f'log_{self.__class__.__name__}'
 
     # override these methods ##############################
     def get_metaparamspace(self):
@@ -24,7 +26,7 @@ class Experiment():
     def save_model(self, model, path):
         pass
 
-    def load_model(self, path):
+    def load_model(self, path, metaparams):
         pass
 
     def train(self, model, metaparams):
@@ -41,18 +43,23 @@ class Experiment():
 
 
     def run(self):
+        # get conditions for this run from implementation
         metaparamspace = self.get_metaparamspace()
         experience = self._get_experience_scalars()
-        metaparams = self.get_metaparams(metaparamspace, experience)
-        if metaparams is None:
+        metaparams_and_epochs = self.get_metaparams(metaparamspace, experience)
+        if metaparams_and_epochs is None:
             raise ValueError(f'Metaparams, returned by "get_metaparams" cannot be None.')
         epochs = 1
-        if type(metaparams) == tuple:
-            metaparams, epochs = metaparams
+        if type(metaparams_and_epochs) == tuple:
+            metaparams, epochs = metaparams_and_epochs
 
+        # create or open run
         run_name = self._file_name_from_metaparams(metaparams)
+        print(f'Run: {run_name}')
         run_path = os.path.join(self.logdir, run_name)
         run_meta_path = os.path.join(run_path, RUN_META_FILE)
+
+        # write or read run meta file
         if not os.path.exists(run_path):
             os.makedirs(run_path)
             with open(run_meta_path, 'w') as file:
@@ -64,6 +71,7 @@ class Experiment():
                     raise KeyError('Metaparams of this run did not match expectation (from name) ' +
                                    f'{metaparams} but meta file was {meta}.')
 
+        # load checkpoints of the run, it's gonna be just the folder names
         checkpoints = self._get_checkpoints(run_path)
 
         if len(checkpoints) == 0:
@@ -89,23 +97,35 @@ class Experiment():
             # save evaluation
             self._save_evaluation(evaluation, checkpoint_path)
 
+            # instead of re-reading the checkpoints from file, just adjust the variable
+            # to have the newly created one included
             checkpoints = ['0']
 
-
+        # find latest checkpoint, TODO: find latest checkpoint with a valid model file in it
         latest_epoch = int(checkpoints[-1])
         print(f'Training upon checkpoint {latest_epoch}')
         for epoch in range(latest_epoch, latest_epoch + epochs):
             checkpoint_path = os.path.join(run_path, str(epoch))
 
+            # open checkpoint meta file
+            checkpoint_meta_path = os.path.join(checkpoint_path, CHECKPOINT_META_FILE)
+            with open(checkpoint_meta_path, 'r') as file:
+                checkpoint_meta = json.load(file)
+
             # load model
             model_path = os.path.join(checkpoint_path, MODEL_FILE)
-            model = self.load_model(model_path)
+            model = self.load_model(model_path, metaparams)
 
             # train model
             time_start = pytime.time()
-            model = self.train(model, metaparams)
+            train_result = self.train(model, metaparams)
             time_end = pytime.time()
             time = time_end - time_start
+
+            if type(train_result) == tuple:
+                model, train_evaluation = train_result
+            else:
+                model, train_evaluation = train_result, {}
 
             # save new checkpoint
             new_checkpoint_path = os.path.join(run_path, str(epoch+1))
@@ -117,8 +137,7 @@ class Experiment():
             self.save_model(model, new_model_path)
 
             # save checkpoint meta
-            time = pytime.time()
-            checkpoint_meta = {'time': time, 'epoch': epoch+1}
+            checkpoint_meta = {'time': checkpoint_meta['time'] + time, 'epoch': epoch+1}
             new_checkpoint_meta_path = os.path.join(new_checkpoint_path, CHECKPOINT_META_FILE)
             with open(new_checkpoint_meta_path, 'w') as file:
                 json.dump(checkpoint_meta, file)
@@ -142,15 +161,26 @@ class Experiment():
     def _load_evaluation(self, checkpoint_path, filter_fn=None):
         # a file for each key in en extra evaluation directory and pickeled content
         evaluation = {}
+        # find the directory with all evaluations of the checkpoint
         evaluation_path = os.path.join(checkpoint_path, EVAUATION_DIR)
-        evaluation_files = next(os.walk(checkpoint_path))[1]
-        for evaluation_file in evaluation_files:
-            evaluation_file_name = os.path.basename(evaluation_file)
-            if evaluation_file_name.endswith(EVALUATION_FILE_EXT):
-                evaluation_key = evaluation_file_name[-len(EVALUATION_FILE_EXT):]
-                with open(os.path.join(evaluation_path, evaluation_file_name), 'rb') as file:
-                    evaluation_value = pickle.loads(file)
+        if not os.path.exists(evaluation_path):
+            return evaluation
+        # find all files in it, not recursively
+        evaluation_file_names = next(os.walk(evaluation_path))[2]
+        # each of the files is one evaluation
+        for evaluation_file_name in evaluation_file_names:
+            # find the full path of each file
+            evaluation_file_path = os.path.join(evaluation_path, evaluation_file_name)
+            # only regard files with the proper file extention
+            if evaluation_file_path.endswith(EVALUATION_FILE_EXT):
+                # the key or name of the evaluation is just the file name, but without the file extention
+                evaluation_key = evaluation_file_name[:-len(EVALUATION_FILE_EXT)]
+                # read the evaluation from file
+                with open(evaluation_file_path, 'rb') as file:
+                    evaluation_value = pickle.load(file)
+                    # filter by the custom filter function, if given
                     if filter_fn is None or filter_fn(evaluation_key, evaluation_value):
+                        # and insert it to results with the proper key
                         evaluation[evaluation_key] = evaluation_value
         self._validate_evaluation(evaluation)
         return evaluation
@@ -202,9 +232,10 @@ class Experiment():
 
                 # merge everything into one directory
                 experience_row = {}
-                experience_row.update(evaluation)
                 experience_row.update(metaparams)
                 experience_row.update(checkpoint_meta)
+                for key in evaluation:
+                    experience_row[key] = float(evaluation[key]['value'])#.cpu().detach().numpy()
 
                 # and append it to the exper table
                 experience_list.append(experience_row)
@@ -230,12 +261,11 @@ class Experiment():
 
         plist = list(map(lambda mp: f'{mp}={cvt(metaparams[mp])}', metaparams))
         name = ','.join(plist)
-        print(name)
         return name
 
     def _get_checkpoints(self, run_path):
-        # return a sorted list of all subdirectories of run_path, that names are integers (referring to its epoch)
-        return sorted(filter(lambda s: s.isdigit(), next(os.walk(run_path))[1]))
+        # return a (as int) sorted list of all subdirectories of run_path, that names are integers (referring to its epoch)
+        return list(map(str, sorted(map(int, filter(lambda s: s.isdigit(), next(os.walk(run_path))[1])))))
 
     def _get_runs(self):
         # return all subdirectories of the experiments self.logdir, that contain a run meta file
