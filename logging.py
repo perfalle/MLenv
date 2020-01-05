@@ -73,7 +73,7 @@ def _validate_evaluation(evaluation):
         if not 'type' in evaluation[key] or not 'value' in evaluation[key]:
             raise KeyError(f'Evaluation should have a type and a value, but f{key} had keys: {evaluation[key].keys()}.')
 
-def _get_experience_scalars(experiment_logdir):
+def _get_experience_scalars(experiment_logdir, fill_evaluations=True):
     # gather scalars over all past runs and checkpoints together with the metadata
     experience_list = []
     # loop through all runs
@@ -105,8 +105,11 @@ def _get_experience_scalars(experiment_logdir):
                 raise KeyError(f'Checkpoint folder name must be the epoch of the checkpoint and matching the epoch in the meta file, ' +
                                f'but they were not equal: Folder name was {epoch_folder_name}, meta file says {epoch_meta}.')
 
-            # load only scalar evaluations from the checkpoint
-            evaluation = _load_evaluation(checkpoint_path, lambda k,v: v['type'] == 'scalar')
+            if fill_evaluations:
+                # load only scalar evaluations from the checkpoint
+                evaluation = _load_evaluation(checkpoint_path, lambda k,v: v['type'] == 'scalar')
+            else:
+                evaluation = {}
 
             # make sure, keys ara unique among evaluation, run metaparams and checkpoint meta information (time and epoch)
             if not (len(evaluation.keys() | metaparams.keys() | checkpoint_meta.keys()) ==
@@ -149,7 +152,6 @@ def _file_name_from_metaparams(metaparams):
 
     plist = list(map(lambda mp: f'{mp}={cvt(metaparams[mp])}', metaparams))
     name = ','.join(plist)
-    print('_file_name_from_metaparams', name)
     return name
 
 def _get_checkpoints(run_path):

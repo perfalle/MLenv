@@ -13,7 +13,7 @@ class Experiment():
     def __init__(self, logdir=None):
         self.logdir = logdir or f'log_{self.__class__.__name__}'
         self.tb_logdir = os.path.join(self.logdir, 'tb')
-        self.provide_experience = True
+        self.experience_fill_evaluations = True
 
     # override these methods ##############################
     def get_metaparamspace(self):
@@ -44,7 +44,7 @@ class Experiment():
     def run(self):
         # get conditions for this run from implementation
         metaparamspace = self.get_metaparamspace()
-        experience = logging._get_experience_scalars(self.logdir) if self.provide_experience else None
+        experience = logging._get_experience_scalars(self.logdir, self.experience_fill_evaluations)
         metaparams_and_epochs = self.get_metaparams(metaparamspace, experience)
         if metaparams_and_epochs is None:
             raise ValueError(f'Metaparams, returned by "get_metaparams" cannot be None.')
