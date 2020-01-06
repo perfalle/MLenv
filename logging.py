@@ -21,10 +21,10 @@ def _write_evaluation_to_experiment_tensorboard(tb_logdir, metaparams, evaluatio
     for key in evaluation:
         tag = key# if section is None else f'{section}/{key}'
         value = evaluation[key]['value']
-        type = evaluation[key]['type']
-        if type == 'scalar':
+        ev_type = evaluation[key]['type']
+        if ev_type == 'scalar':
             tensorboard_writer.add_scalar(tag, value, walltime=walltime, global_step=global_step)
-        elif type == 'image':
+        elif ev_type == 'image':
             tensorboard_writer.add_image(tag, value, walltime=walltime, global_step=global_step)
 
 def _save_evaluation(evaluation, checkpoint_path):
@@ -147,6 +147,8 @@ def _file_name_from_metaparams(metaparams):
             d = d_base
             if d_exp != 0:
                 d = f'{d_base}e{d_exp}'
+            if type(p) == int and len(d) >= len(str(p)):
+                d = str(p)
         except:
             pass
         return d
