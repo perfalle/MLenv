@@ -51,6 +51,8 @@ class Experiment():
         epochs = 1
         if type(metaparams_and_epochs) == tuple:
             metaparams, epochs = metaparams_and_epochs
+        else:
+            metaparams = metaparams_and_epochs
 
         # create or open run
         run_name = logging._file_name_from_metaparams(metaparams)
