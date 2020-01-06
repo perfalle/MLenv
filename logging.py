@@ -37,8 +37,9 @@ def _save_evaluation(evaluation, checkpoint_path):
         if evaluation[key]['type'] == 'image':
             image = np.transpose(evaluation[key]['value'], (1,2,0))
             cv2.imwrite(os.path.join(evaluation_path, key + '.png'), image)
-        with open(os.path.join(evaluation_path, key + EVALUATION_FILE_EXT), 'wb') as file:
-            pickle.dump(evaluation[key], file)
+        else:
+            with open(os.path.join(evaluation_path, key + EVALUATION_FILE_EXT), 'wb') as file:
+                pickle.dump(evaluation[key], file)
 
 
 def _load_evaluation(checkpoint_path, filter_fn=None):
@@ -131,8 +132,8 @@ def _get_experience_scalars(experiment_logdir, fill_evaluations=True):
     return experience
 
 def _file_name_from_metaparams(metaparams):
-    if metaparams is None:
-        raise ValueError(f'Metaparams cannot be None.')
+    if type(metaparams) is not dict:
+        raise ValueError(f'Metaparams must be dict, but was {type(metaparams)}.')
     def cvt(p):
         d = str(p)
         try:
@@ -149,7 +150,6 @@ def _file_name_from_metaparams(metaparams):
         except:
             pass
         return d
-
     plist = list(map(lambda mp: f'{mp}={cvt(metaparams[mp])}', metaparams))
     name = ','.join(plist)
     return name
