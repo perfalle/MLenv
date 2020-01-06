@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+matplotlib.use('Agg')
 
 def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples_per_class=21):
     #   one     two     three   four
@@ -63,6 +64,11 @@ def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples
             original_image = np.transpose(original_image_chw, (1,2,0))
             # latent_image = np.random.random((8, 4, 3))#olr_triple[1].item()
             reconstr_image = np.transpose(reconstr_image_chw, (1,2,0))
+            # fix shapes, if mono, e.g. (32,32,1) --> (32,32)
+            if original_image.shape[-1] == 1:
+                original_image = np.reshape(original_image, original_image.shape[:-1])
+            if reconstr_image.shape[-1] == 1:
+                reconstr_image = np.reshape(reconstr_image, reconstr_image.shape[:-1])
             width_ratios=[original_image.shape[1] / original_image.shape[0],
                           latent_image.shape[1] / latent_image.shape[0],
                           reconstr_image.shape[1] / reconstr_image.shape[0]]
