@@ -2,6 +2,10 @@ import numpy as np
 from itertools import product
 import pandas as pd
 from collections import OrderedDict
+from . import gp
+
+gaussian_process = gp.gaussian_process
+
 
 def random(metaparamspace):
     """selects metaparams randomly"""
@@ -47,20 +51,23 @@ def unroll_1d(metaparamspace1d):
     if type(mps) == list:
         value_list = mps
     elif type(mps) == dict:
-        is_int = mps.get('integer', False)
-        transform_from_uniform = mps.get('transform_from_uniform', lambda x: x)
-        transform_to_uniform = mps.get('transform_to_uniform', lambda x: x)
-        min_uniform = transform_to_uniform(mps['min'] if not is_int else np.ceil(mps['min']))
-        max_uniform = transform_to_uniform(mps['max'] if not is_int else np.floor(mps['max']))
-        steps = mps['steps']
-        space_uniform = np.linspace(min_uniform, max_uniform, num=steps)
-        value_list = map(transform_from_uniform, space_uniform)
-        if is_int:
-            # round numbers, clamp to [min, max], cast to int, remove duplicates
-            value_list = _rm_duplicates(map(int,
-                                            map(lambda v: np.clip(v, mps['min'], mps['max']),
-                                                map(np.round,
-                                                    value_list))))
+        if 'value' in mps:
+            value_list = [mps['value']]
+        else:
+            is_int = mps.get('integer', False)
+            transform_from_uniform = mps.get('transform_from_uniform', lambda x: x)
+            transform_to_uniform = mps.get('transform_to_uniform', lambda x: x)
+            min_uniform = transform_to_uniform(mps['min'] if not is_int else np.ceil(mps['min']))
+            max_uniform = transform_to_uniform(mps['max'] if not is_int else np.floor(mps['max']))
+            steps = mps['steps']
+            space_uniform = np.linspace(min_uniform, max_uniform, num=steps)
+            value_list = map(transform_from_uniform, space_uniform)
+            if is_int:
+                # round numbers, clamp to [min, max], cast to int, remove duplicates
+                value_list = _rm_duplicates(map(int,
+                                                map(lambda v: np.clip(v, mps['min'], mps['max']),
+                                                    map(np.round,
+                                                        value_list))))
     return value_list
 
 
