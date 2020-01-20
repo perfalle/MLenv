@@ -2,6 +2,9 @@ import os
 import time as pytime
 import json
 from . import logging
+import torch
+import gc
+import numpy as np
 
 
 # import like: from MLenv import Experiment
@@ -34,9 +37,16 @@ class Experiment():
     def evaluate(self, model, epoch, time): # return value of train
         pass # -> evaluation(s), dict: {'metric name': {'type': scalar, 'value': value}}
 
-    def get_metaparams(self, metaparamspace, experience):
+    def get_training_conditions(self, metaparamspace, experience):
         """experience: pandas dataframe with 'epoch', 'time' as well as all metaparameters and all 'scalar' evaluations"""
-        pass # -> training conditions: metaparams[, epochs=1]
+        pass # -> training conditions:
+        # {
+        #   'metaparams': mp,
+        #   'epochs': 1,
+        #   'abs_epochs': 42,
+        #   'time': 60,
+        #   'abs_time': 3600
+        # }
 
     # end ################################################
 
@@ -45,18 +55,20 @@ class Experiment():
         # get conditions for this run from implementation
         metaparamspace = self.get_metaparamspace()
         experience = logging._get_experience_scalars(self.logdir, self.experience_fill_evaluations)
-        metaparams_and_epochs = self.get_metaparams(metaparamspace, experience)
-        if metaparams_and_epochs is None:
-            raise ValueError(f'Metaparams, returned by "get_metaparams" cannot be None.')
-        epochs = 1
-        if type(metaparams_and_epochs) == tuple:
-            metaparams, epochs = metaparams_and_epochs
-        else:
-            metaparams = metaparams_and_epochs
+        conditions = self.get_training_conditions(metaparamspace, experience)
+
+        if conditions is None:
+            raise ValueError(f'conditions, returned by "get_training_conditions" cannot be None.')
+        print(conditions)
+        metaparams = conditions.get('metaparams')
+        if metaparams is None:
+            raise ValueError(f'metaparams in training conditions cannot be None.')
 
         # create or open run
         run_name = logging._file_name_from_metaparams(metaparams)
         print(f'Run: {run_name}')
+        if torch.cuda.is_available():
+            print(f'Currently {torch.cuda.memory_allocated()} of GPU memory allocated.')
         run_path = os.path.join(self.logdir, run_name)
         run_meta_path = os.path.join(run_path, logging.RUN_META_FILE)
 
@@ -103,16 +115,25 @@ class Experiment():
             # to have the newly created one included
             checkpoints = ['0']
 
+            del model
+
         # find latest checkpoint, TODO: find latest checkpoint with a valid model file in it
         latest_epoch = int(checkpoints[-1])
         print(f'Training upon checkpoint {latest_epoch}')
-        for epoch in range(latest_epoch, latest_epoch + epochs):
+        epoch_run_start = latest_epoch
+        time_run_start = None
+        epoch = latest_epoch
+        while True:
+        #for epoch in range(latest_epoch, latest_epoch + epochs):
             checkpoint_path = os.path.join(run_path, str(epoch))
 
             # open checkpoint meta file
             checkpoint_meta_path = os.path.join(checkpoint_path, logging.CHECKPOINT_META_FILE)
             with open(checkpoint_meta_path, 'r') as file:
                 checkpoint_meta = json.load(file)
+            
+            if time_run_start == None:
+                time_run_start = checkpoint_meta['time']
 
             # load model
             model_path = os.path.join(checkpoint_path, logging.MODEL_FILE)
@@ -145,9 +166,44 @@ class Experiment():
                 json.dump(checkpoint_meta, file)
 
             # evaluate
-            evaluation = self.evaluate(model, checkpoint_meta['epoch'], checkpoint_meta['time']) or {}
+            test_evaluation = self.evaluate(model, checkpoint_meta['epoch'], checkpoint_meta['time']) or {}
+
 
             # save evaluation
-            logging._save_evaluation(evaluation, new_checkpoint_path)
-            logging._write_evaluation_to_experiment_tensorboard(self.tb_logdir, metaparams, evaluation,
+            logging._save_evaluation(train_evaluation, new_checkpoint_path)
+            logging._write_evaluation_to_experiment_tensorboard(self.tb_logdir, metaparams, train_evaluation,
                                                                 checkpoint_meta['time'], checkpoint_meta['epoch'])
+            logging._save_evaluation(test_evaluation, new_checkpoint_path)
+            logging._write_evaluation_to_experiment_tensorboard(self.tb_logdir, metaparams, test_evaluation,
+                                                                checkpoint_meta['time'], checkpoint_meta['epoch'])
+
+            del model
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            epoch += 1
+
+            # train another epoch, if the conditions are not met yet
+            target_abs_epoch = conditions.get('abs_epochs', -np.inf)
+            if checkpoint_meta['epoch'] < target_abs_epoch:
+                print(f'Finished epoch {checkpoint_meta["epoch"]}, of desired {target_abs_epoch} (abs)')
+                continue
+
+            target_abs_epoch = epoch_run_start + conditions.get('epochs', -np.inf)
+            if checkpoint_meta['epoch'] < target_abs_epoch:
+                print(f'Finished epoch {checkpoint_meta["epoch"]}, of desired {target_abs_epoch} (rel)')
+                continue
+
+            target_abs_time = conditions.get('abs_time', -np.inf)
+            if checkpoint_meta['time'] < target_abs_time:
+                print(f'Trained {checkpoint_meta["time"]}, of desired {target_abs_time} seconds (abs)')
+                continue
+
+            target_abs_time = time_run_start + conditions.get('time', -np.inf)
+            if checkpoint_meta['time'] < target_abs_time:
+                print(f'Trained {checkpoint_meta["time"]}, of desired {target_abs_time} seconds (rel)')
+                continue
+            
+            # otherwise finish training loop
+            break
+        pass
