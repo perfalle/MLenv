@@ -6,9 +6,10 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
-matplotlib.use('Agg')
 
 def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples_per_class=21):
+    plt_prev_backend = matplotlib.get_backend()
+    matplotlib.use('Agg')
     #   one     two     three   four
     #   O|L|R   O|L|R   O|L|R   O|L|R
     #   O|L|R   O|L|R   O|L|R   O|L|R
@@ -115,5 +116,7 @@ def autoencoder_image_sample(dataloader, encoder, decoder, classnames, n_samples
     image = image.reshape((int(width), int(height), 3))
     # image = image.reshape((3, int(width), int(height)))
     image = np.transpose(image, (2,0,1))
+
+    matplotlib.use(plt_prev_backend)
 
     return {'type': 'image', 'value': image}
