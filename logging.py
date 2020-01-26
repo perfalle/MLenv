@@ -153,6 +153,7 @@ def _file_name_from_metaparams(metaparams):
             pass
         return d
     plist = list(map(lambda mp: f'{mp}={cvt(metaparams[mp])}', metaparams))
+    plist = sorted(plist)
     name = ','.join(plist)
     return name
 
